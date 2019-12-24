@@ -88,7 +88,8 @@ public class DataCollectApplication {
                         }
                         if (batchArgs.size() > 0) {
                             batchStoreData(batchArgs);
-                            Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.compareTo(y));
+
+                            Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.getDataTime().compareTo(y.getDataTime()));
                             if (maxPointData.isPresent()) {
                                 lastProcessDate = maxPointData.get().getDataTime();
                             }
