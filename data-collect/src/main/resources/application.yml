@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    source:
+      name: source
+      jdbc-url: jdbc:sqlserver://172.20.20.1:1433;DatabaseName=Runtime
+      username: sa
+      password: Zsb83887154
+    target:
+      name: target
+      jdbc-url: jdbc:oracle:thin:@localhost:1521:orcl
+      username: db_donghu_portal
+      password: donghu87775236
