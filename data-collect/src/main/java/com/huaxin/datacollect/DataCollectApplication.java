@@ -51,51 +51,54 @@ public class DataCollectApplication {
     @Bean
     public CommandLineRunner runner() {
         return (args) -> {
-            //将采集点放入本地缓存
-            LoadingCache<String, List<CollectPoint>> cahceBuilder = CacheBuilder.newBuilder()
-                    .expireAfterAccess(1, TimeUnit.MINUTES)
-                    .build(new CacheLoader<String, List<CollectPoint>>() {
-                        @Override
-                        public List<CollectPoint> load(String key) throws Exception {
-                            return getCollectPoints();
-                        }
-                    });
-
-            while (true) {
-                try {
-                    //读取实时数据
-                    List<PointData> pointDatas = readDatas();
-                    if (pointDatas != null && pointDatas.size() > 0) {
-                        List<Object[]> batchArgs = new ArrayList<Object[]>();
-                        List<CollectPoint> collectPoints = cahceBuilder.get(COLLECT_POINTS);
-                        if (collectPoints.size() > 0) {
-                            for (CollectPoint point : collectPoints) {
-                                String dataFormula = point.getDataFormula();
-                                for (PointData data : pointDatas) {
-                                    String tagName = data.getTagName();
-                                    if (StringUtils.strip(tagName).equals(StringUtils.strip(dataFormula))) {
-                                        Integer collectingDataId = point.getCollectingDataId();
-                                        Date dataTime = data.getDataTime();
-                                        Double value = data.getValue();
-                                        batchArgs.add(new Object[]{collectingDataId, dataTime, value});
-                                        // storeData(collectingDataId, dataTime, value);
+            new Thread(() -> {
+                //将采集点放入本地缓存
+                LoadingCache<String, List<CollectPoint>> cahceBuilder = CacheBuilder.newBuilder()
+                        .expireAfterAccess(1, TimeUnit.MINUTES)
+                        .build(new CacheLoader<String, List<CollectPoint>>() {
+                            @Override
+                            public List<CollectPoint> load(String key) throws Exception {
+                                return getCollectPoints();
+                            }
+                        });
+                while (true) {
+                    try {
+                        //读取实时数据
+                        List<PointData> pointDatas = readDatas();
+                        if (pointDatas != null && pointDatas.size() > 0) {
+                            List<Object[]> batchArgs = new ArrayList<Object[]>();
+                            List<CollectPoint> collectPoints = cahceBuilder.get(COLLECT_POINTS);
+                            if (collectPoints.size() > 0) {
+                                for (CollectPoint point : collectPoints) {
+                                        String dataFormula = point.getDataFormula();
+                                    for (PointData data : pointDatas) {
+                                        String tagName = data.getTagName();
+                                        if (StringUtils.strip(tagName).equals(StringUtils.strip(dataFormula))) {
+                                            Integer collectingDataId = point.getCollectingDataId();
+                                            Date dataTime = data.getDataTime();
+                                            Double value = data.getValue();
+                                            batchArgs.add(new Object[]{collectingDataId, dataTime, value});
+                                            // storeData(collectingDataId, dataTime, value);
+                                        }
+                                    }
+                                }
+                                if (batchArgs.size() > 0) {
+                                    batchStoreData(batchArgs);
+                                    Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.getDataTime().compareTo(y.getDataTime()));
+                                    if (maxPointData.isPresent()) {
+                                        lastProcessDate = maxPointData.get().getDataTime().toString();
                                     }
                                 }
                             }
-                            if (batchArgs.size() > 0) {
-                                batchStoreData(batchArgs);
-                                Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.getDataTime().compareTo(y.getDataTime()));
-                                if (maxPointData.isPresent()) {
-                                    lastProcessDate = maxPointData.get().getDataTime().toString();
-                                }
-                            }
                         }
+                        TimeUnit.SECONDS.sleep(1);
+                    } catch (Exception e) {
+                        log.error(e.getMessage());
                     }
-                    TimeUnit.SECONDS.sleep(1);
-                } catch (Exception e) {
-                    log.error(e.getMessage());
                 }
-            }
+            }).start();
+
+
         };
     }
 
