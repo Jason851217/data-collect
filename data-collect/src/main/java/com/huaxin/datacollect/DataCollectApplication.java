@@ -7,6 +7,7 @@ import com.google.common.cache.LoadingCache;
 import com.huaxin.datacollect.bean.CollectPoint;
 import com.huaxin.datacollect.bean.PointData;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.CommandLineRunner;
@@ -17,9 +18,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.util.StringUtils;
 
 import java.sql.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
@@ -39,7 +41,7 @@ public class DataCollectApplication {
     @Qualifier("targetJdbcTemplate")
     private JdbcTemplate targetJdbcTemplate;
 
-    private Date lastProcessDate = new Date();//需要存储到DB
+    private String lastProcessDate = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));//需要存储到DB
 
     public static void main(String[] args) {
         SpringApplication.run(DataCollectApplication.class, args);
@@ -49,16 +51,9 @@ public class DataCollectApplication {
     @Bean
     public CommandLineRunner runner() {
         return (args) -> {
-            // List<CollectPoint> collectPoints = getCollectPoints();
-            // Cache<String,String> cache = CacheBuilder.newBuilder()
-            //         .maximumSize(2)
-            //         .expireAfterWrite(3,TimeUnit.SECONDS)
-            //         .build();
-            // cache.put("collectPoints","value1");
-
             //将采集点放入本地缓存
             LoadingCache<String, List<CollectPoint>> cahceBuilder = CacheBuilder.newBuilder()
-                    .expireAfterAccess(1, TimeUnit.DAYS)
+                    .expireAfterAccess(1, TimeUnit.MINUTES)
                     .build(new CacheLoader<String, List<CollectPoint>>() {
                         @Override
                         public List<CollectPoint> load(String key) throws Exception {
@@ -67,59 +62,61 @@ public class DataCollectApplication {
                     });
 
             while (true) {
-                //读取实时数据
-                List<PointData> pointDatas = readDatas();
-                if (pointDatas != null && pointDatas.size() > 0) {
-                    List<Object[]> batchArgs = new ArrayList<Object[]>();
-                    List<CollectPoint> collectPoints = cahceBuilder.get(COLLECT_POINTS);
-                    if (collectPoints.size() > 0) {
-                        for (CollectPoint point : collectPoints) {
-                            String dataFormula = point.getDataFormula();
-                            for (PointData data : pointDatas) {
-                                String tagName = data.getTagName();
-                                if (tagName.equals(dataFormula)) {
-                                    Integer collectingDataId = point.getCollectingDataId();
-                                    Date dataTime = data.getDataTime();
-                                    Double value = data.getValue();
-                                    batchArgs.add(new Object[]{collectingDataId, dataTime, value});
-                                    // storeData(collectingDataId, dataTime, value);
+                try {
+                    //读取实时数据
+                    List<PointData> pointDatas = readDatas();
+                    if (pointDatas != null && pointDatas.size() > 0) {
+                        List<Object[]> batchArgs = new ArrayList<Object[]>();
+                        List<CollectPoint> collectPoints = cahceBuilder.get(COLLECT_POINTS);
+                        if (collectPoints.size() > 0) {
+                            for (CollectPoint point : collectPoints) {
+                                String dataFormula = point.getDataFormula();
+                                for (PointData data : pointDatas) {
+                                    String tagName = data.getTagName();
+                                    if (StringUtils.strip(tagName).equals(StringUtils.strip(dataFormula))) {
+                                        Integer collectingDataId = point.getCollectingDataId();
+                                        Date dataTime = data.getDataTime();
+                                        Double value = data.getValue();
+                                        batchArgs.add(new Object[]{collectingDataId, dataTime, value});
+                                        // storeData(collectingDataId, dataTime, value);
+                                    }
+                                }
+                            }
+                            if (batchArgs.size() > 0) {
+                                batchStoreData(batchArgs);
+                                Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.getDataTime().compareTo(y.getDataTime()));
+                                if (maxPointData.isPresent()) {
+                                    lastProcessDate = maxPointData.get().getDataTime().toString();
                                 }
                             }
                         }
-                        if (batchArgs.size() > 0) {
-                            batchStoreData(batchArgs);
-
-                            Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.getDataTime().compareTo(y.getDataTime()));
-                            if (maxPointData.isPresent()) {
-                                lastProcessDate = maxPointData.get().getDataTime();
-                            }
-                        }
                     }
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (Exception e) {
+                    log.error(e.getMessage());
                 }
-                TimeUnit.SECONDS.sleep(1);
             }
         };
     }
 
     private void batchStoreData(List<Object[]> batchArgs) {
-        String sql = "insert into rdms_collecting_data_value(CollectingDataid,DataTime,Value) values(?,?,?)";
+        String sql = "insert into RDMS_COLLECTING_DATA_VALUE(DATA_ID,DATA_TIME,DATA_VALUE) values(?,?,?)";
         targetJdbcTemplate.batchUpdate(sql, batchArgs);
     }
 
     private void storeData(Integer collectingDataId, Date dataTime, Double value) {
-        String sql = "insert into rdms_collecting_data_value(CollectingDataid,DataTime,Value) values(?,?,?)";
+        String sql = "insert into RDMS_COLLECTING_DATA_VALUE(DATA_ID,DATA_TIME,DATA_VALUE) values(?,?,?)";
         targetJdbcTemplate.update(sql, collectingDataId, dataTime, value);
-
     }
 
     /**
      * 读取实时数据
      */
     public List<PointData> readDatas() {
-        String sql = "select DateTime,TagName,Value from v_AnalogLive where DateTime > ?";
+        String sql = "select DateTime,TagName,Value from v_AnalogLive where  CONVERT(varchar(100), DateTime, 25) > ?";
         List<PointData> result = sourceJdbcTemplate.query(sql, new Object[]{lastProcessDate}, (rs, rowNum) -> {
             PointData pointData = PointData.builder()
-                    .dataTime(rs.getDate("DateTime"))
+                    .dataTime(rs.getTimestamp("DateTime"))
                     .tagName(rs.getString("TagName"))
                     .value(rs.getDouble("Value"))
                     .build();
@@ -148,9 +145,4 @@ public class DataCollectApplication {
         return points;
     }
 
-
-    // @Scheduled(fixedDelay = 2000)
-    // public void fixedDelay() {
-    //     List<CollectPoint> collectItems = getCollectPoints();
-    // }
 }

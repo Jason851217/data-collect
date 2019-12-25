@@ -5,8 +5,10 @@ spring:
       jdbc-url: jdbc:sqlserver://172.20.20.1:1433;DatabaseName=Runtime
       username: sa
       password: Zsb83887154
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
     target:
       name: target
-      jdbc-url: jdbc:oracle:thin:@localhost:1521:orcl
-      username: db_donghu_portal
+      jdbc-url: jdbc:oracle:thin:@172.20.20.2:1523:orcl
+      username: dbo_donghu_portal
       password: donghu87775236
+      driver-class-name: oracle.jdbc.driver.OracleDriver
