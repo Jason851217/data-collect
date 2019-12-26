@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    source:
+      name: source
+      jdbc-url: jdbc:sqlserver://172.20.20.1:1433;DatabaseName=Runtime
+      username: sa
+      password: Zsb83887154
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    target:
+      name: target
+      jdbc-url: jdbc:oracle:thin:@172.20.20.2:1523:orcl
+      username: dbo_donghu_portal
+      password: donghu87775236
+      driver-class-name: oracle.jdbc.driver.OracleDriver
