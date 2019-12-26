@@ -34,7 +34,6 @@ public class CollectDataTask {
         String curTime = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         LocalDateTime pre5DateTime = now.plusMinutes(-5);
         String pre5Time = pre5DateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-
         System.out.println("pre5Time:" + pre5Time + ",curTime:" + curTime);
         // select * from up_date where update < to_date('2007-09-07 00:00:00','yyyy-mm-dd hh24:mi:ss') and update > to_date('2007-07-07 00:00:00','yyyy-mm-dd hh24:mi:ss')
         // String sql = "insert into RDMS_COLLECTING_DATA_VALUE(DATA_ID,DATA_TIME,DATA_VALUE) values(?,?,?)";
