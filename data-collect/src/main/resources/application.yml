@@ -12,3 +12,5 @@ spring:
       username: dbo_donghu_portal
       password: donghu87775236
       driver-class-name: oracle.jdbc.driver.OracleDriver
+
+test-cron: '*/5 * * * * ?'
