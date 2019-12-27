@@ -13,4 +13,4 @@ spring:
       password: donghu87775236
       driver-class-name: oracle.jdbc.driver.OracleDriver
 
-test-cron: '*/5 * * * * ?'
+test-cron: '0 */5 * * * ?'
