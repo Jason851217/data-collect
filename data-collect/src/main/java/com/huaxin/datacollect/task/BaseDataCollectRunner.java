@@ -12,16 +12,15 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.jackson.JsonObjectSerializer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.util.DigestUtils;
 
-import java.time.LocalDate;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -76,55 +75,51 @@ public class BaseDataCollectRunner implements CommandLineRunner {
             log.info(">>>>>>>>本次没有待处理数据");
             return;
         }
+        //获取采集点
         List<CollectPoint> collectPoints = cahceBuilder.get(COLLECT_POINTS);
         if (collectPoints == null || collectPoints.isEmpty()) {
             log.info(">>>>>>>>没有采集点");
             return;
         }
+        Map<String, CollectPoint> collectPointMap = collectPoints.stream().collect(Collectors.toMap(data -> StringUtils.strip(data.getDataFormula()), data -> data));
         log.info(">>>>>>>>开始处理");
-        log.info(">>>>>>>>本次待处理数据条数：{}", pointDatas.size());
-        log.info(">>>>>>>>当前采集点个数：{}", collectPoints.size());
-
-
-        List<Object[]> batchArgs = buildArgs(pointDatas, collectPoints);
-        byte[] bytes = objectMapper.writeValueAsBytes(batchArgs);
-        String s = DigestUtils.md5DigestAsHex(bytes);
-        if(s.equals(str)){
-            return ;
-        }else{
-            str=s;
-            log.info(">>>>>>>>当前匹配采集点个数：{}", batchArgs.size());
-            if (batchArgs.size() > 0) {
-                batchStoreData(batchArgs);
-                Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.getDataTime().compareTo(y.getDataTime()));
-                if (maxPointData.isPresent()) {
-                    lastProcessDate = maxPointData.get().getDataTime().toString();
-                    log.info(">>>>>>>>本次数据最大时间点：{}", lastProcessDate);
-                }
-            }
-            log.info(">>>>>>>>结束处理");
+        List<Object[]> batchArgs = buildArgs(pointDatas, collectPointMap);
+        if (batchArgs.size() > 0) {
+            batchStoreData(batchArgs);
+            // Optional<PointData> maxPointData = pointDatas.stream().max((x, y) -> x.getDataTime().compareTo(y.getDataTime()));
+            // if (maxPointData.isPresent()) {
+            //     lastProcessDate = maxPointData.get().getDataTime().toString();
+            //     log.info(">>>>>>>>本次数据最大时间点：{}", lastProcessDate);
+            // }
         }
+        log.info("本次处理数据条数：{}", batchArgs.size());
+        log.info(">>>>>>>>结束处理");
+    }
 
+    private boolean isExist(Integer dataId, Date dateTime) {
+        String sql = "select count(*) from RDMS_COLLECTING_BASE_VALUE where DATA_ID =? and to_char(DATA_TIME, 'yyyymmdd hh24:mi:ss.ff3')=?";
+        Integer rows = targetJdbcTemplate.queryForObject(sql, new Object[]{dataId, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(dateTime)}, Integer.class);
+        return rows != null && rows.intValue() > 0;
     }
 
     /**
      * 匹配采集点数据，构造sql参数集合
      *
-     * @param pointDatas    数据集合
-     * @param collectPoints 采集点集合
+     * @param pointDatas      数据集合
+     * @param collectPointMap 采集点集合
      * @return
      */
-    private List<Object[]> buildArgs(List<PointData> pointDatas, List<CollectPoint> collectPoints) {
+    private List<Object[]> buildArgs(List<PointData> pointDatas, Map<String, CollectPoint> collectPointMap) {
         List<Object[]> batchArgs = new ArrayList<Object[]>();
-        for (CollectPoint point : collectPoints) {
-            String dataFormula = point.getDataFormula();
-            for (PointData data : pointDatas) {
-                String tagName = data.getTagName();
-                if (StringUtils.strip(tagName).equals(StringUtils.strip(dataFormula))) {
-                    Integer collectingDataId = point.getCollectingDataId();
-                    Date dataTime = data.getDataTime();
-                    Double value = data.getValue();
-                    batchArgs.add(new Object[]{collectingDataId, dataTime, value});
+        for (PointData pointData : pointDatas) {
+            String tagName = StringUtils.strip(pointData.getTagName());
+            if (collectPointMap.containsKey(tagName)) {
+                CollectPoint collectPoint = collectPointMap.get(tagName);
+                Integer dataId = collectPoint.getCollectingDataId();
+                Date dataTime = pointData.getDataTime();
+                if (!isExist(dataId, dataTime)) {
+                    Double value = pointData.getValue();
+                    batchArgs.add(new Object[]{dataId, dataTime, value});
                 }
             }
         }
@@ -145,18 +140,10 @@ public class BaseDataCollectRunner implements CommandLineRunner {
      * 读取实时数据
      */
     private List<PointData> readDatas() throws JsonProcessingException {
-//        String sql = "select DateTime,TagName,Value from v_AnalogLive where  DATEDIFF(ms,DateTime,enddate) CONVERT(varchar(23), DateTime, 25) > ?";
-//        String sql = "select DateTime,TagName,Value from v_AnalogLive where  DATEDIFF(ms,?,CONVERT(varchar(23), DateTime, 25))>0";
-//        List<PointData> result = sourceJdbcTemplate.query(sql, new Object[]{lastProcessDate}, (rs, rowNum) -> {
-//            PointData pointData = PointData.builder()
-//                    .dataTime(rs.getTimestamp("DateTime"))
-//                    .tagName(rs.getString("TagName"))
-//                    .value(rs.getDouble("Value"))
-//                    .build();
-//            return pointData;
-//        });
-        String sql = "select DateTime,TagName,Value from v_AnalogLive where CONVERT(varchar(10), DateTime, 120) =? ";
-        List<PointData> result = sourceJdbcTemplate.query(sql, new Object[]{LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))},(rs, rowNum) -> {
+        // String sql = "select DateTime,TagName,Value from v_AnalogLive where CONVERT(varchar(10), DateTime, 120) =? ";
+        String sql = "select DateTime,TagName,Value from v_AnalogLive";
+        // List<PointData> result = sourceJdbcTemplate.query(sql, new Object[]{LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))}, (rs, rowNum) -> {
+        List<PointData> result = sourceJdbcTemplate.query(sql, (rs, rowNum) -> {
             PointData pointData = PointData.builder()
                     .dataTime(rs.getTimestamp("DateTime", Calendar.getInstance(Locale.SIMPLIFIED_CHINESE)))
                     .tagName(rs.getString("TagName"))
