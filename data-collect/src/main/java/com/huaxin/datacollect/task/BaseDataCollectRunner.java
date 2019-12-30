@@ -1,6 +1,5 @@
 package com.huaxin.datacollect.task;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -94,7 +93,7 @@ public class BaseDataCollectRunner implements CommandLineRunner {
     }
 
     private boolean isExist(Integer dataId, Date dateTime) {
-        String sql = "select count(*) from RDMS_COLLECTING_BASE_VALUE where DATA_ID =? and to_char(DATA_TIME, 'yyyymmdd hh24:mi:ss.ff3')=?";
+        String sql = "select count(*) from RDMS_COLLECTING_BASE_VALUE where DATA_ID =? and to_char(DATA_TIME, 'yyyy-MM-dd hh24:mi:ss.ff3')=?";
         Integer rows = targetJdbcTemplate.queryForObject(sql, new Object[]{dataId, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(dateTime)}, Integer.class);
         return rows != null && rows.intValue() > 0;
     }
@@ -136,7 +135,7 @@ public class BaseDataCollectRunner implements CommandLineRunner {
     /**
      * 读取实时数据
      */
-    private List<PointData> readDatas() throws JsonProcessingException {
+    private List<PointData> readDatas() {
         // String sql = "select DateTime,TagName,Value from v_AnalogLive where CONVERT(varchar(10), DateTime, 120) =? ";
         String sql = "select DateTime,TagName,Value from v_AnalogLive";
         // List<PointData> result = sourceJdbcTemplate.query(sql, new Object[]{LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))}, (rs, rowNum) -> {
