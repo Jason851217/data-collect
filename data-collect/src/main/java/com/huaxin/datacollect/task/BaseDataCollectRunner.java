@@ -6,11 +6,13 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.huaxin.datacollect.bean.CollectPoint;
 import com.huaxin.datacollect.bean.PointData;
+import com.huaxin.datacollect.utils.RedisUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -27,7 +29,6 @@ public class BaseDataCollectRunner implements CommandLineRunner {
 
     private static final String COLLECT_POINTS = "collectPoints";
 
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     //将采集点放入本地缓存
     private LoadingCache<String, List<CollectPoint>> cahceBuilder = CacheBuilder.newBuilder()
@@ -47,7 +48,6 @@ public class BaseDataCollectRunner implements CommandLineRunner {
     @Qualifier("targetJdbcTemplate")
     private JdbcTemplate targetJdbcTemplate;
 
-    private String lastProcessDate = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
 
     @Override
     public void run(String... args) throws Exception {
@@ -113,6 +113,12 @@ public class BaseDataCollectRunner implements CommandLineRunner {
                 CollectPoint collectPoint = collectPointMap.get(tagName);
                 Integer dataId = collectPoint.getCollectingDataId();
                 Date dataTime = pointData.getDataTime();
+//                String val = dataId+"@"+ dataTime.toString();
+//                if(!redisUtils.sExist("basedata:key",val)){
+//                    Double value = pointData.getValue();
+//                    batchArgs.add(new Object[]{dataId, dataTime, value});
+//                    redisUtils.sSetAndTime("basedata:key",60000,val);
+//                }
                 if (!isExist(dataId, dataTime)) {
                     Double value = pointData.getValue();
                     batchArgs.add(new Object[]{dataId, dataTime, value});
@@ -141,7 +147,7 @@ public class BaseDataCollectRunner implements CommandLineRunner {
         // List<PointData> result = sourceJdbcTemplate.query(sql, new Object[]{LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))}, (rs, rowNum) -> {
         List<PointData> result = sourceJdbcTemplate.query(sql, (rs, rowNum) -> {
             PointData pointData = PointData.builder()
-                    .dataTime(rs.getTimestamp("DateTime", Calendar.getInstance(Locale.SIMPLIFIED_CHINESE)))
+                    .dataTime(rs.getTimestamp("DateTime"))
                     .tagName(rs.getString("TagName"))
                     .value(rs.getDouble("Value"))
                     .build();
