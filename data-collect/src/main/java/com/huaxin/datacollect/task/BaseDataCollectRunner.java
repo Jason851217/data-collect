@@ -40,9 +40,6 @@ public class BaseDataCollectRunner implements CommandLineRunner {
                 }
             });
 
-    private String str;
-
-
     @Autowired
     @Qualifier("sourceJdbcTemplate")
     private JdbcTemplate sourceJdbcTemplate;
